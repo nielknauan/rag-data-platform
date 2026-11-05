@@ -1,0 +1,19 @@
+{"question": "Qual é o objetivo da LGPD?", "source": "lgpd_lei_13709.md", "section": "Art. 1"}
+{"question": "Quais são os fundamentos da disciplina de proteção de dados pessoais?", "source": "lgpd_lei_13709.md", "section": "Art. 2"}
+{"question": "O que é considerado dado pessoal sensível?", "source": "lgpd_lei_13709.md", "section": "Art. 5"}
+{"question": "Qual a diferença entre controlador e operador?", "source": "lgpd_lei_13709.md", "section": "Art. 5"}
+{"question": "Quem é o encarregado de dados?", "source": "lgpd_lei_13709.md", "section": "Art. 5"}
+{"question": "Quais são os princípios que o tratamento de dados deve seguir?", "source": "lgpd_lei_13709.md", "section": "Art. 6"}
+{"question": "Em quais hipóteses posso tratar dados pessoais sem consentimento do titular?", "source": "lgpd_lei_13709.md", "section": "Art. 7"}
+{"question": "Posso usar dados pessoais para proteção do crédito?", "source": "lgpd_lei_13709.md", "section": "Art. 7"}
+{"question": "Quando é permitido tratar dados de saúde ou biométricos?", "source": "lgpd_lei_13709.md", "section": "Art. 11"}
+{"question": "Quais direitos o titular pode exigir do controlador?", "source": "lgpd_lei_13709.md", "section": "Art. 18"}
+{"question": "O titular tem direito à portabilidade dos dados?", "source": "lgpd_lei_13709.md", "section": "Art. 18"}
+{"question": "Quais medidas de segurança os agentes de tratamento devem adotar?", "source": "lgpd_lei_13709.md", "section": "Art. 46"}
+{"question": "O que fazer em caso de incidente de segurança ou vazamento de dados?", "source": "lgpd_lei_13709.md", "section": "Art. 48"}
+{"question": "O que deve conter a comunicação de incidente à autoridade nacional?", "source": "lgpd_lei_13709.md", "section": "Art. 48"}
+{"question": "Qual o prazo interno da ACME para responder uma solicitação de titular?", "source": "politica_privacidade_acme.md", "section": "Atendimento aos titulares"}
+{"question": "Por quanto tempo a ACME guarda dados de candidatos?", "source": "politica_privacidade_acme.md", "section": "Retenção de dados"}
+{"question": "Posso usar dados pessoais para treinar modelos de IA na ACME?", "source": "politica_privacidade_acme.md", "section": "Uso de dados em modelos de IA"}
+{"question": "Em quanto tempo devo avisar o time de segurança sobre um vazamento na ACME?", "source": "politica_privacidade_acme.md", "section": "Incidentes de segurança"}
+{"question": "Posso copiar dados reais de produção para o ambiente de teste?", "source": "guia_seguranca_acme.md", "section": "Ambientes de desenvolvimento", "after_incremental": true}
