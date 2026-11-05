@@ -1,0 +1,58 @@
+name: Perguntar ao RAG
+
+on:
+  workflow_dispatch:
+    inputs:
+      pergunta:
+        description: "Sua pergunta sobre LGPD / políticas"
+        required: true
+        default: "Quem é o encarregado de dados?"
+      modo:
+        description: "Tipo de busca"
+        type: choice
+        options: [hybrid, vector]
+        default: hybrid
+
+jobs:
+  ask:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+      LAKEHOUSE_ROOT: ${{ github.workspace }}/lakehouse
+      SEARCH_MODE: ${{ inputs.modo }}
+      PERGUNTA: ${{ inputs.pergunta }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/fastembed_cache
+          key: fastembed-paraphrase-multilingual-minilm
+      - run: pip install -r requirements.txt
+
+      - name: Monta o índice
+        run: |
+          mkdir -p lakehouse/landing/docs && cp data/sample/incoming/*.md lakehouse/landing/docs/
+          python -m rag_lakehouse.pipeline run
+
+      - name: Responde
+        run: |
+          python -m rag_lakehouse.pipeline ask "$PERGUNTA" > resposta.json
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          r = json.load(open("resposta.json", encoding="utf-8"))
+          print(f"## ❓ {r['question']}\n")
+          print("| # | Fonte | Seção | Score |\n|---|---|---|---|")
+          for s in r["sources"]:
+              print(f"| {s['n']} | {s['source']} | **{s['section']}** | {s['score']} |")
+          print("\n### Trechos recuperados\n")
+          print(r["answer"].replace("Trechos mais relevantes:", "").strip())
+          PY
+          cat resposta.json
