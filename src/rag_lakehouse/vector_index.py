@@ -33,15 +33,62 @@ def sync_index(df: pd.DataFrame, db_path: str, model_name: str) -> dict:
             .when_not_matched_by_source_delete()
             .execute(df)
         )
+    # índice full-text (BM25) para a busca híbrida: acha termos exatos ("encarregado", "portabilidade")
+    tbl.create_fts_index("text", replace=True, language="Portuguese", stem=True,
+                         remove_stop_words=True, ascii_folding=True)
     rows = tbl.count_rows()
     if rows >= ANN_MIN_ROWS:
         tbl.create_index(metric="cosine", vector_column_name="vector", replace=True)
     return {"table": name, "rows": rows, "ann_index": rows >= ANN_MIN_ROWS}
 
 
-def search(db_path: str, model_name: str, query_vector: list[float], k: int = 5, where: str | None = None) -> pd.DataFrame:
-    tbl = lancedb.connect(db_path).open_table(table_name(model_name))
-    q = tbl.search(query_vector).metric("cosine").limit(k)
+COLS = ["chunk_id", "source", "section", "text"]
+RRF_K = 60  # constante padrão do Reciprocal Rank Fusion
+
+
+def _vector(tbl, query_vector, n, where):
+    q = tbl.search(query_vector).metric("cosine").limit(n)
     if where:
         q = q.where(where, prefilter=True)
-    return q.to_pandas()[["chunk_id", "source", "section", "text", "_distance"]]
+    return q.to_pandas()
+
+
+def _fulltext(tbl, query_text, n, where):
+    q = tbl.search(query_text, query_type="fts").limit(n)
+    if where:
+        q = q.where(where, prefilter=True)
+    try:
+        return q.to_pandas()
+    except Exception:  # sem índice FTS ou consulta sem termos válidos
+        return pd.DataFrame(columns=COLS)
+
+
+def search(
+    db_path: str,
+    model_name: str,
+    query_vector: list[float],
+    k: int = 5,
+    where: str | None = None,
+    query_text: str | None = None,
+) -> pd.DataFrame:
+    """Busca vetorial; com `query_text`, híbrida (vetor + BM25) fundida por RRF.
+
+    RRF soma 1/(60 + posição) de cada lista: não precisa normalizar escalas de
+    score diferentes (distância cosseno vs. BM25) e premia quem aparece bem nas duas.
+    """
+    tbl = lancedb.connect(db_path).open_table(table_name(model_name))
+    vec = _vector(tbl, query_vector, k * 4 if query_text else k, where)
+    if not query_text:
+        return vec[COLS + ["_distance"]]
+
+    fts = _fulltext(tbl, query_text, k * 4, where)
+    scores: dict[str, float] = {}
+    for ranked in (vec["chunk_id"].tolist(), fts["chunk_id"].tolist()):
+        for pos, cid in enumerate(ranked, start=1):
+            scores[cid] = scores.get(cid, 0.0) + 1.0 / (RRF_K + pos)
+
+    rows = pd.concat([vec[COLS], fts[COLS]]).drop_duplicates("chunk_id").set_index("chunk_id")
+    top = sorted(scores, key=scores.get, reverse=True)[:k]
+    out = rows.loc[top].reset_index()
+    out["_score"] = [round(scores[c], 5) for c in top]
+    return out

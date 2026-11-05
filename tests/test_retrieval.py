@@ -48,3 +48,20 @@ def test_metricas_de_avaliacao():
     assert hit_and_rank(got, ("a", "Art. 5")) == 2
     m = metrics([1, 2, None, 1], k=5)
     assert m["hit_rate@5"] == 0.75 and m["mrr@5"] == round((1 + 0.5 + 1) / 4, 3)
+
+
+def test_busca_hibrida_acha_termo_exato(tmp_path, docs):
+    emb = HashEmbedder()
+    df = _frame(docs, emb)
+    sync_index(df, str(tmp_path), emb.name)
+    q = "Quem é o encarregado de dados?"
+    hits = search(str(tmp_path), emb.name, emb.embed([q])[0], k=3, query_text=q)
+    assert hits.iloc[0]["section"] == "Art. 5" and "encarregado" in hits.iloc[0]["text"]
+    assert "_score" in hits.columns
+
+
+def test_artigo_longo_vira_um_chunk_por_inciso(docs):
+    chunks = [c for c in chunk_document(clean_text(docs["lgpd_lei_13709.md"])) if c["section"] == "Art. 5"]
+    assert len(chunks) == 10
+    assert all(c["text"].startswith("Art. 5º") for c in chunks)
+    assert any("VIII - encarregado" in c["text"] for c in chunks)

@@ -21,9 +21,11 @@ SYSTEM = (
 )
 
 
-def retrieve(question: str, k: int = 5, where: str | None = None):
+def retrieve(question: str, k: int = 5, where: str | None = None, hybrid: bool | None = None):
+    hybrid = os.getenv("SEARCH_MODE", "hybrid") == "hybrid" if hybrid is None else hybrid
     emb = get_embedder()
-    return search(get_paths().vector_db, emb.name, emb.embed([question])[0], k=k, where=where)
+    return search(get_paths().vector_db, emb.name, emb.embed([question])[0], k=k, where=where,
+                  query_text=question if hybrid else None)
 
 
 def _post(url: str, payload: dict, headers: dict) -> dict:
@@ -69,6 +71,6 @@ def answer(question: str, k: int = 4) -> dict:
     return {
         "question": question,
         "answer": generate(question, context),
-        "sources": [{"n": i + 1, "source": r["source"], "section": r["section"], "distance": round(float(r["_distance"]), 4)}
+        "sources": [{"n": i + 1, "source": r["source"], "section": r["section"], "score": round(float(r.get("_score", r.get("_distance", 0))), 4)}
                     for i, r in enumerate(rows)],
     }

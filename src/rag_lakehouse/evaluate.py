@@ -30,11 +30,15 @@ def run_eval(golden_path: str, k: int = 5, include_incremental: bool = True) -> 
     rows = [json.loads(line) for line in Path(golden_path).read_text(encoding="utf-8").splitlines() if line.strip()]
     if not include_incremental:
         rows = [r for r in rows if not r.get("after_incremental")]
-    ranks, details = [], []
-    for row in rows:
-        hits = retrieve(row["question"], k=k)
-        got = list(zip(hits["source"], hits["section"]))
-        rank = hit_and_rank(got, (row["source"], row["section"]))
-        ranks.append(rank)
-        details.append({"question": row["question"], "expected": row["section"], "rank": rank})
-    return {**metrics(ranks, k), "details": details}
+    # Compara as duas estratégias no mesmo golden set; o gate usa a híbrida (padrão)
+    out = {}
+    for mode in ("vector", "hybrid"):
+        ranks, details = [], []
+        for row in rows:
+            hits = retrieve(row["question"], k=k, hybrid=mode == "hybrid")
+            got = list(zip(hits["source"], hits["section"]))
+            rank = hit_and_rank(got, (row["source"], row["section"]))
+            ranks.append(rank)
+            details.append({"question": row["question"], "expected": row["section"], "rank": rank})
+        out[mode] = metrics(ranks, k)
+    return {**out["hybrid"], "comparison": out, "details": details}

@@ -78,6 +78,33 @@ def _split_by_size(text: str, max_chars: int, overlap: int) -> list[str]:
     return [text[i : i + max_chars] for i in range(0, len(text), step)]
 
 
+INCISO_RE = re.compile(r"(?m)^(?=[IVXLC]+ - )")
+ARTICLE_SPLIT_CHARS = 700
+
+
+def split_article(body: str) -> list[str]:
+    """Artigo longo -> um chunk por inciso, cada um prefixado pelo caput.
+
+    Ex.: o Art. 5º tem 10 definições; num chunk único o vetor fica "diluído" e a
+    busca por "encarregado" perde para artigos mais focados. Com o caput repetido,
+    cada inciso continua autoexplicativo ("Art. 5º ... considera-se: VIII - encarregado...").
+    Parágrafos (§) ficam juntos num chunk próprio.
+    """
+    if len(body) <= ARTICLE_SPLIT_CHARS or not INCISO_RE.search(body):
+        return [body]
+    head, *rest = INCISO_RE.split(body)
+    caput = head.strip()
+    items, paragraphs = [], []
+    for part in rest:
+        inciso, sep, tail = part.partition("\n§")
+        items.append(f"{caput}\n{inciso.strip()}")
+        if sep:
+            paragraphs.append(("§" + tail).strip())
+    if paragraphs:
+        items.append(f"{caput.splitlines()[0][:120]}\n" + "\n".join(paragraphs))
+    return items
+
+
 def chunk_document(text: str, max_chars: int = 1500, overlap: int = 150) -> list[dict]:
     """Chunking orientado à estrutura.
 
@@ -95,7 +122,8 @@ def chunk_document(text: str, max_chars: int = 1500, overlap: int = 150) -> list
         for i, s in enumerate(starts):
             body = text[s : starts[i + 1] if i + 1 < len(starts) else len(text)].strip()
             num = re.search(r"\d+", ARTICLE_RE.match(body).group(1)).group(0)
-            sections.append((f"Art. {num}", body))
+            for piece in split_article(body):
+                sections.append((f"Art. {num}", piece))
     elif HEADING_RE.search(text):
         starts = [m.start() for m in HEADING_RE.finditer(text)]
         if starts[0] > 0:
