@@ -33,25 +33,28 @@ flowchart LR
 |---|---|
 | **Ingestão batch e streaming** | `ingestion.py`: o mesmo código Structured Streaming roda em batch (`trigger(availableNow=True)`) ou contínuo (`make stream`). Checkpoints garantem exactly-once |
 | **Data lake / warehouse** | Medalhão em Delta Lake: Bronze (raw, append-only) → Silver (MERGE, versão mais recente por documento) → Gold (chunks + embeddings) |
-| **Datasets otimizados para ML** | `gold/chunks`: chunking orientado à estrutura (1 artigo de lei = 1 chunk; markdown por seção), IDs determinísticos, contagem de tokens, metadados para filtro e citação |
+| **Datasets otimizados para ML** | `gold/chunks`: chunking orientado à estrutura. Artigo curto vira 1 chunk; artigo longo vira **1 chunk por inciso com o caput repetido**, para que cada definição tenha seu próprio vetor. Markdown é quebrado por seção. IDs determinísticos, contagem de tokens e metadados para filtro e citação |
 | **Pipeline de embeddings** | `gold.py`: embeddings distribuídos via `mapInPandas`, modelo carregado uma vez por worker, modelo multilíngue rodando em CPU (ONNX) |
-| **Indexação vetorial para RAG** | `vector_index.py`: LanceDB com `merge_insert` incremental (insere, atualiza e remove vetores órfãos), filtro por metadados e ANN (IVF-PQ) automático acima de 5 mil vetores |
+| **Indexação vetorial para RAG** | `vector_index.py`: LanceDB com `merge_insert` incremental (insere, atualiza e remove vetores órfãos), filtro por metadados, ANN (IVF-PQ) automático acima de 5 mil vetores e **busca híbrida**: vetor + BM25 em português (stemming e stopwords), fundidos por Reciprocal Rank Fusion |
 | **Qualidade, governança e segurança** | PII (e-mail, CPF, CNPJ, telefone) mascarada **antes** do embedding; quality gates bloqueiam publicação se houver PII, chunk vazio ou grande demais, vetor faltando ou dimensão inconsistente; contagem de PII mascarada auditável na Silver |
 | **Custo de storage e processamento** | Hash de conteúdo + chave `(chunk_id, modelo)`: reprocessar sem mudança gera **0 chamadas ao modelo**, o que é verificado no CI. Silver só reescreve documento quando o hash muda. `make maintain` roda OPTIMIZE e VACUUM |
 | **Feature store com AI Engineers** | `gold/embeddings` funciona como feature store de vetores: versionada por modelo (vários modelos convivem, com rollback fácil), point-in-time via Delta time travel, e o índice é um derivado reconstruível |
 
 ## 📊 Avaliação contínua do retrieval
 
-`data/eval/golden.jsonl` tem perguntas reais com o trecho esperado. O CI calcula **hit rate@5** e **MRR** e quebra o build se a qualidade cair (por exemplo, numa troca de modelo, chunking ou limpeza).
+`data/eval/golden.jsonl` tem perguntas reais com o trecho esperado. O CI calcula **hit rate@5** e **MRR** para a busca **vetorial pura** e para a **híbrida**, e quebra o build se a qualidade cair (por exemplo, numa troca de modelo, chunking ou limpeza).
 
 **Resultado no CI** (modelo `paraphrase-multilingual-MiniLM-L12-v2`, CPU):
 
-| Métrica | Valor |
-|---|---|
-| hit rate@5 | **0.895** |
-| MRR@5 | **0.75** |
-| Perguntas no golden set | 19 |
-| Embeddings gerados ao reprocessar sem mudança | **0** |
+| Versão | hit rate@5 | MRR@5 |
+|---|---|---|
+| v1: vetorial, 1 chunk por artigo | 0.895 | 0.750 |
+| v2: vetorial, chunk por inciso | 0.842 | 0.842 |
+| **v3: híbrida (vetor + BM25) + chunk por inciso** | **0.947** | **0.868** |
+
+O golden set tem 19 perguntas. Reprocessar sem mudança gera **0 embeddings**: 62 de 62 chunks são reaproveitados. Quando chega um documento novo, só os chunks dele são embedados: 4 novos e 62 reaproveitados.
+
+> **Caso real que motivou a v3:** "Quem é o encarregado de dados?" não achava o Art. 5º. O artigo tem 10 definições num chunk só, e o vetor ficava diluído. Quebrar por inciso melhorou a ordenação (MRR) mas, sozinho, derrubou o hit rate. Somar o BM25, que acha o termo exato, resolveu os dois. Hoje o Art. 5 vem em 1º lugar.
 
 ```bash
 make eval
