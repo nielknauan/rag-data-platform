@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+      LAKEHOUSE_ROOT: ${{ github.workspace }}/lakehouse
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache do modelo de embeddings
+        uses: actions/cache@v4
+        with:
+          path: /tmp/fastembed_cache
+          key: fastembed-paraphrase-multilingual-minilm
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Testes unitários
+        run: EMBEDDER=hash pytest -q
+
+      - name: "Carga inicial: landing -> bronze -> silver -> gold -> embeddings -> índice"
+        run: python -m rag_lakehouse.pipeline run
+
+      - name: "Avaliação do retrieval (gate: hit rate@5 >= 0.8)"
+        run: python -m rag_lakehouse.pipeline eval --before-incremental --min-hit-rate 0.8
+
+      - name: "Custo: reprocessar sem mudança não pode gerar nenhum embedding"
+        run: python -m rag_lakehouse.pipeline run --max-new-embeddings 0
+
+      - name: "Incremental: chega um documento novo, só ele é embedado"
+        run: |
+          cp data/sample/incoming/*.md lakehouse/landing/docs/
+          python -m rag_lakehouse.pipeline run --max-new-embeddings 10
+          python -m rag_lakehouse.pipeline eval --min-hit-rate 0.8
+
+      - name: Pergunta de exemplo
+        run: python -m rag_lakehouse.pipeline ask "Quem é o encarregado de dados?"
+
+      - name: Manutenção (OPTIMIZE + VACUUM)
+        run: python -m rag_lakehouse.pipeline maintain
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build da imagem
+        run: docker build -t rag-lakehouse .
