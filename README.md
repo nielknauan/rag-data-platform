@@ -44,8 +44,17 @@ flowchart LR
 
 `data/eval/golden.jsonl` tem perguntas reais com o trecho esperado. O CI calcula **hit rate@5** e **MRR** e quebra o build se a qualidade cair (por exemplo, numa troca de modelo, chunking ou limpeza).
 
+**Resultado no CI** (modelo `paraphrase-multilingual-MiniLM-L12-v2`, CPU):
+
+| Métrica | Valor |
+|---|---|
+| hit rate@5 | **0.895** |
+| MRR@5 | **0.75** |
+| Perguntas no golden set | 19 |
+| Embeddings gerados ao reprocessar sem mudança | **0** |
+
 ```bash
-make eval   # {"hit_rate@5": ..., "mrr@5": ..., "n": 19}
+make eval
 ```
 
 ## 🧪 O que o CI prova a cada push
